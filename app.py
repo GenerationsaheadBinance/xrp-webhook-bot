@@ -1,31 +1,50 @@
 from flask import Flask, request, jsonify
 import ccxt
+import os
 
 app = Flask(__name__)
 
-@app.route("/", methods=["POST"])
+# Initialize the Binance exchange
+exchange = ccxt.binance({
+    'apiKey': os.getenv('lZxM8dLKt42DLO0SbesHrfTVYJX1gJNC50WXjX0O2wSylY1n1V5lL8EcB97vjcjX'),
+    'secret': os.getenv('kN7hOZsUsteYR36OXeLwt9fZga4UdkxhSoIMFy9J2yikZBqREEhzCOeq8L2ooo5e'),
+    'enableRateLimit': True
+})
+
+@app.route('/', methods=['POST'])
 def webhook():
     data = request.json
-    if not data:
-        return jsonify({"status": "error", "message": "No JSON payload"}), 400
-
-    symbol = data.get("symbol")
-    price = float(data.get("price", 0))
-    quantity = float(data.get("quantity", 0))
 
     try:
-        exchange = ccxt.binance({
-            "apiKey": "lZxM8dLKt42DLO0SbesHrfTVYJX1gJNC50WXjX0O2wSylY1n1V5lL8EcB97vjcjX",
-            "secret": "kN7hOZsUsteYR36OXeLwt9fZga4UdkxhSoIMFy9J2yikZBqREEhzCOeq8L2ooo5e",
-            "enableRateLimit": True,
-        })
+        symbol = data['symbol']       # e.g., 'XRP/USDT'
+        side = data['side'].lower()   # 'buy' or 'sell'
+        price = float(data['price'])
+        quantity = float(data['quantity'])
 
-        # Place real order
-        order = exchange.create_limit_buy_order(symbol=symbol, amount=quantity, price=price)
+        stop_loss = float(data['stop_loss']) if 'stop_loss' in data else None
+        take_profit = float(data['take_profit']) if 'take_profit' in data else None
 
-        return jsonify({"status": "success", "order": order})
+        # Place the order
+        if side == 'buy':
+            order = exchange.create_limit_buy_order(symbol, quantity, price)
+        elif side == 'sell':
+            order = exchange.create_limit_sell_order(symbol, quantity, price)
+        else:
+            return jsonify({'error': 'Invalid side: use "buy" or "sell"'}), 400
+
+        # You can implement custom logic to handle stop_loss/take_profit
+        # For now, just print/log it — future version can add OCO orders
+        if stop_loss or take_profit:
+            print(f"Stop Loss: {stop_loss}, Take Profit: {take_profit} (not yet auto-managed)")
+
+        return jsonify({'success': True, 'order': order})
+
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-if __name__ == "__main__":
+@app.route('/', methods=['GET'])
+def home():
+    return "XRP Scalping Bot is running."
+
+if __name__ == '__main__':
     app.run(host="0.0.0.0", port=8080)
